@@ -1,0 +1,31 @@
+# Monitoring stack: API + Prometheus + Grafana
+# Start: docker compose up -d     Stop: docker compose down
+# Prometheus and Grafana use the host network, so they reach the API at localhost:8000
+services:
+  api:
+    build: .
+    image: heart-api:latest
+    container_name: heart-api
+    ports:
+      - "8000:8000"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    network_mode: host
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: grafana
+    network_mode: host
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+    depends_on:
+      - prometheus
