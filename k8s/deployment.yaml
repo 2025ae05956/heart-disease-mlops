@@ -1,0 +1,46 @@
+# Deployment: runs 2 copies (pods) of the heart-api container and keeps them healthy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heart-api
+  labels:
+    app: heart-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: heart-api
+  template:
+    metadata:
+      labels:
+        app: heart-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: heart-api
+          image: heart-api:latest
+          imagePullPolicy: Never        # use the image loaded into Minikube, do not download
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:               # send traffic only when the API is ready
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:                # restart the container if it stops responding
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20

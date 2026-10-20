@@ -1,0 +1,18 @@
+  # Ingress: routes web traffic for the host name heart-api.local to the service
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: heart-api
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: heart-api.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: heart-api
+                port:
+                  number: 80
