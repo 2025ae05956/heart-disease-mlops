@@ -64,3 +64,28 @@ def main():
     ConfusionMatrixDisplay.from_predictions(y_test, pred, ax=ax[0], colorbar=False)
     RocCurveDisplay.from_predictions(y_test, prob, ax=ax[1])
     ax[0].set_title("Confusion matrix (test)")
+    ax[1].set_title("ROC curve (test)")
+    fig.savefig(OUT / "evaluation_plots.png", dpi=120, bbox_inches="tight")
+    plt.close(fig)
+
+    # 5. MLflow tracking
+    mlflow.set_tracking_uri(f"sqlite:///{OUT / 'mlflow.db'}")
+    mlflow.set_experiment("heart-disease-ci")
+    with mlflow.start_run(run_name="ci-training"):
+        mlflow.log_params({"model": "LogisticRegression", "C": 1, "class_weight": "balanced",
+                           "test_size": 0.2, "cv_folds": 5, "random_state": RANDOM_STATE})
+        mlflow.log_metrics(metrics)
+        mlflow.log_artifact(str(OUT / "evaluation_plots.png"))
+        mlflow.sklearn.log_model(model, name="model",
+                                 signature=infer_signature(X_train, model.predict(X_train)),
+                                 input_example=X_train.head(3), skops_trusted_types=TRUSTED)
+    print(f"Saved model and outputs to {OUT}")
+
+    # 6. quality gate: stop the pipeline if the model is not good enough
+    if metrics["test_accuracy"] < args.min_accuracy:
+        raise SystemExit(f"QUALITY GATE FAILED: test accuracy {metrics['test_accuracy']} < {args.min_accuracy}")
+    print(f"Quality gate passed: test accuracy {metrics['test_accuracy']} >= {args.min_accuracy}")
+
+
+if __name__ == "__main__":
+    main()
