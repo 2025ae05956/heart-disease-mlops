@@ -1,0 +1,93 @@
+# CI pipeline: lint -> unit tests -> model training
+# Runs automatically on every push to main, and can be started by hand (Run workflow).
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ---------------- Job 1: code quality ----------------
+  lint:
+    name: 1. Lint (flake8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install flake8
+        run: pip install flake8==7.1.1
+      - name: Run flake8
+        run: |
+          set -o pipefail
+          mkdir -p reports
+          flake8 src tests --count --statistics | tee reports/flake8_report.txt
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: reports/
+
+  # ---------------- Job 2: unit tests ----------------
+  test:
+    name: 2. Unit tests (pytest)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run pytest
+        run: |
+          set -o pipefail
+          mkdir -p reports
+          pytest tests -v --junitxml=reports/junit.xml | tee reports/pytest_output.txt
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: reports/
+
+  # ---------------- Job 3: model training ----------------
+  train:
+    name: 3. Train model
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Train, evaluate and log to MLflow
+        run: |
+          set -o pipefail
+          mkdir -p reports
+          python src/train.py --min-accuracy 0.80 2>&1 | tee reports/training_log.txt
+      - name: Show metrics on the run page
+        run: |
+          echo "## Model metrics" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat outputs/metrics.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+      - name: Upload trained model and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: |
+            outputs/
+            mlruns/
+            reports/
